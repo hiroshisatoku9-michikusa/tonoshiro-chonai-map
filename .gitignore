@@ -1,0 +1,13 @@
+# 個人情報を含むPDFは公開しない
+zumendainigogatu.pdf
+pages/
+
+# OS
+.DS_Store
+
+# Claudeローカル設定
+.claude/
+
+# 書き出し用JSONなど
+tonoshiro_polygons.json
+tonoshiro_frozen_default.json

@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登野城地区 町内マップ（1〜8町内）</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Hiragino Sans", "ヒラギノ角ゴ ProN", sans-serif; background: #f4f5f7; color: #222; }
+  header { padding: 12px 18px; background: #2c3e50; color: white; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { margin: 0; font-size: 18px; }
+  header .sub { font-size: 12px; opacity: .8; margin-top: 3px; }
+  header .mode-badge { background: #e67e22; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; display: none; }
+  header.edit-mode .mode-badge { display: inline-block; }
+  .layout { display: grid; grid-template-columns: 360px 1fr; height: calc(100vh - 56px); }
+  .sidebar { background: white; border-right: 1px solid #e1e4e8; overflow-y: auto; padding: 16px; }
+  #map { height: 100%; position: relative; }
+  .search { background: #f8f9fa; border: 1px solid #dfe3e8; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+  .search label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #333; }
+  .search input { width: 100%; padding: 10px 12px; font-size: 16px; border: 1px solid #c5cbd2; border-radius: 6px; }
+  .search input:focus { outline: none; border-color: #3498db; box-shadow: 0 0 0 3px rgba(52,152,219,.2); }
+  .search .hint { font-size: 11px; color: #6a737d; margin-top: 6px; }
+  .result { margin-top: 10px; padding: 12px; border-radius: 6px; background: white; border: 1px solid #e1e4e8; font-size: 14px; }
+  .result.empty { color: #999; text-align: center; }
+  .result.found { border-left: 4px solid; }
+  .result .town-num { font-size: 22px; font-weight: 700; }
+  .result .town-desc { font-size: 12px; color: #555; margin-top: 4px; }
+  .result .note { font-size: 11px; color: #d63031; margin-top: 6px; padding: 6px 8px; background: #fff5f5; border-radius: 4px; }
+  .result .multi { font-size: 11px; color: #b7791f; margin-top: 6px; padding: 6px 8px; background: #fffbeb; border-radius: 4px; }
+  .result .ovr { font-size: 11px; color: #0c5460; margin-top: 6px; padding: 6px 8px; background: #d1ecf1; border-radius: 4px; }
+  .legend h3 { font-size: 13px; margin: 14px 0 8px; color: #444; }
+  .legend ul { list-style: none; padding: 0; margin: 0; }
+  .legend li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 13px; cursor: pointer; border-radius: 4px; }
+  .legend li:hover { background: #f4f5f7; }
+  .legend .swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid rgba(0,0,0,.2); flex-shrink: 0; }
+  .legend .desc { font-size: 11px; color: #6a737d; }
+  details.refs, details.check-panel { margin-top: 14px; font-size: 12px; background: #f8f9fa; padding: 10px; border-radius: 8px; }
+  details.refs summary, details.check-panel summary { cursor: pointer; color: #3498db; padding: 4px 0; font-weight: 600; }
+  details.refs ol { padding-left: 22px; }
+  details.refs li { margin: 4px 0; }
+  details.refs a { color: #3498db; text-decoration: none; }
+  details.refs a:hover { text-decoration: underline; }
+  .footer-note { font-size: 11px; color: #999; margin-top: 16px; line-height: 1.5; }
+
+  /* ホバーツールチップ＝ポップアップ風 */
+  .leaflet-tooltip.town-hover {
+    background: white; border: 1px solid #ccc; border-radius: 6px;
+    padding: 6px 12px; font-size: 14px; font-weight: 700; box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  }
+  .leaflet-tooltip.town-hover::before { display: none; }
+
+  /* 編集パネル */
+  .edit-panel { background: #f8f9fa; border: 1px solid #dfe3e8; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+  .edit-panel h3 { margin: 0 0 8px; font-size: 14px; }
+  .edit-panel .btn { display: block; width: 100%; padding: 10px; margin: 6px 0; border: none; border-radius: 6px; background: #3498db; color: white; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .edit-panel .btn:hover { background: #2980b9; }
+  .edit-panel .btn.toggle.on { background: #e67e22; }
+  .edit-panel .btn.danger { background: #e74c3c; }
+  .edit-panel .btn.secondary { background: #6c757d; }
+  .edit-panel .btn.success { background: #27ae60; }
+  .edit-panel .btn.small { font-size: 12px; padding: 6px; }
+  .edit-panel .row { display: flex; gap: 6px; }
+  .edit-panel .row .btn { flex: 1; }
+  .edit-panel .help { font-size: 11px; color: #6a737d; margin-top: 6px; line-height: 1.5; }
+  .edit-panel .status { font-size: 12px; padding: 8px; background: white; border-radius: 4px; margin-top: 8px; border: 1px solid #e1e4e8; }
+  .area-select { width: 100%; padding: 8px; border: 1px solid #c5cbd2; border-radius: 6px; font-size: 13px; margin-top: 4px; background: white; }
+  .snap-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 8px; padding: 6px 0; }
+  .snap-toggle input { cursor: pointer; }
+  .part-list { background: white; border: 1px solid #e1e4e8; border-radius: 6px; padding: 6px; margin-top: 8px; max-height: 200px; overflow-y: auto; }
+  .part-row { display: flex; gap: 4px; align-items: center; padding: 4px; font-size: 12px; border-bottom: 1px solid #f0f0f0; }
+  .part-row:last-child { border: none; }
+  .part-row .part-label { flex: 1; }
+  .part-row.active { background: #fff3cd; border-radius: 4px; }
+  .part-row button { padding: 3px 8px; font-size: 11px; border: 1px solid #ccc; background: white; border-radius: 3px; cursor: pointer; }
+  .part-row button.del { color: #e74c3c; border-color: #e74c3c; }
+  .part-row button.edit-btn { color: #3498db; border-color: #3498db; }
+
+  /* 再ラベリングUI */
+  .check-panel .panel-body { padding-top: 8px; }
+  .check-panel .summary-line { font-size: 12px; color: #555; margin: 8px 0; padding: 6px; background: white; border-radius: 4px; }
+  .check-panel h4 { font-size: 12px; margin: 10px 0 6px; color: #333; }
+  .rel-list { max-height: 280px; overflow-y: auto; background: white; border: 1px solid #e1e4e8; border-radius: 4px; }
+  .rel-row { display: flex; gap: 6px; align-items: center; padding: 6px 8px; font-size: 12px; border-bottom: 1px solid #f0f0f0; }
+  .rel-row:last-child { border: none; }
+  .rel-row .banchi-label { flex: 1; }
+  .rel-row select, .rel-row button { font-size: 11px; padding: 3px 6px; }
+  .rel-row button { background: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer; }
+  .rel-row button:hover { background: #2980b9; }
+  .override-list { background: #d1ecf1; padding: 6px; border-radius: 4px; }
+  .override-row { display: flex; gap: 6px; align-items: center; padding: 3px 0; font-size: 12px; }
+  .override-row button { margin-left: auto; background: #e74c3c; color: white; border: none; border-radius: 3px; padding: 2px 8px; cursor: pointer; font-size: 11px; }
+
+  @media (max-width: 720px) {
+    .layout { grid-template-columns: 1fr; grid-template-rows: auto 60vh; height: auto; }
+    .sidebar { max-height: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>登野城地区 町内マップ（第二民児協）</h1>
+    <div class="sub">番地検索 ／ 7町内整合性チェック ／ 編集モードで道路沿いトレース</div>
+  </div>
+  <span class="mode-badge">✏️ 編集モード</span>
+</header>
+<div id="storage-warn" style="display:none;background:#d1ecf1;border-bottom:2px solid #17a2b8;padding:10px 16px;font-size:13px">
+  <b>⚠ ローカル保存が無効：</b>このページは <code>data:</code> URLで開かれているため、ブラウザのlocalStorageが使えません。<b>編集してもブラウザを閉じると消えます</b>。永続保存するには、Finderで <code>index.html</code> をダブルクリック → 別タブで開き直してください。または編集後に「JSON書き出し」でファイル保存してください。
+</div>
+<div id="error-banner" style="display:none;background:#fff3cd;border-bottom:2px solid #f0ad4e;padding:10px 16px;font-size:13px">
+  <b>初期化エラー:</b> <span id="error-msg"></span>
+  <button onclick="if(confirm('このページの保存データを全消去してリロードします。OK?')){localStorage.removeItem('tonoshiro_polygons_v3');localStorage.removeItem('tonoshiro_polygons_v2');localStorage.removeItem('tonoshiro_polygons_v1');localStorage.removeItem('tonoshiro_frozen_default_v1');localStorage.removeItem('tonoshiro_relabel_overrides_v1');location.reload();}"
+          style="margin-left:10px;padding:4px 10px;background:#e74c3c;color:white;border:none;border-radius:4px;cursor:pointer">ストレージ全消去してリロード</button>
+</div>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="search">
+      <label for="banchi">登野城の番地を入力</label>
+      <input id="banchi" type="text" inputmode="text" placeholder="例: 123, 573-3, 石垣市登野城200" autocomplete="off">
+      <div class="hint">数字または「123-4」形式の枝番OK。「石垣市登野城123」のフル住所も可。</div>
+      <div id="result" class="result empty">番地を入力してください</div>
+    </div>
+
+    <div class="edit-panel">
+      <h3>🗺 ポリゴン編集</h3>
+      <button id="toggle-edit" class="btn toggle">編集モードON</button>
+      <div id="edit-controls" style="display:none">
+        <label style="font-size:12px;display:block;margin-top:8px">対象町内</label>
+        <select id="town-select" class="area-select"></select>
+        <div class="part-list" id="part-list"></div>
+        <div class="row">
+          <button id="add-part-btn" class="btn small success">この町内にポリゴン追加</button>
+        </div>
+        <label class="snap-toggle">
+          <input type="checkbox" id="snap-toggle" checked>
+          道路にスナップする
+        </label>
+        <div id="snap-status" class="status">道路データ：未読み込み</div>
+        <div class="help">
+          頂点を<b>ドラッグ</b>で移動／<b>中間点</b>をドラッグで頂点追加／頂点を<b>右クリック</b>または再クリックで削除。<br>
+          道路スナップONなら頂点が近くの道路ラインに吸着します。
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button id="export-btn" class="btn small">JSON書き出し</button>
+          <button id="import-btn" class="btn small secondary">JSON読み込み</button>
+        </div>
+        <input id="import-file" type="file" accept="application/json" style="display:none">
+        <button id="freeze-btn" class="btn small success">現状を凍結デフォルトに固定</button>
+        <button id="reset-all-btn" class="btn small danger">凍結デフォルトに戻す</button>
+        <div id="save-status" class="status">変更は自動でブラウザに保存されます</div>
+      </div>
+    </div>
+
+    <details class="check-panel">
+      <summary>🏷 7町内 ラベル整合性チェック</summary>
+      <div class="panel-body">
+        <button id="run-check-btn" class="btn small">不整合を抽出</button>
+        <div id="check-results"></div>
+      </div>
+    </details>
+
+    <div class="legend">
+      <h3>町内 凡例（クリックで地図に焦点）</h3>
+      <ul id="legend-list"></ul>
+    </div>
+    <details class="refs">
+      <summary>📄 元PDFの該当ページを参照</summary>
+      <ol id="pdf-refs"></ol>
+    </details>
+    <div class="footer-note">
+      地図上の色分けはPDF（zumendainigogatu.pdf）14ページ。番地検索はPDF記載＋再ラベリング結果を反映。
+    </div>
+  </aside>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.min.js"></script>
+<script>
+window.addEventListener("error", e => {
+  const banner = document.getElementById("error-banner");
+  const msg = document.getElementById("error-msg");
+  if (banner && msg) {
+    banner.style.display = "block";
+    msg.textContent = (e.error?.message || e.message || "不明なエラー") + "  —  詳細はブラウザのコンソール（Cmd+Opt+J）を確認";
+  }
+  console.error("[init error]", e.error || e.message, e);
+});
+
+// localStorage が使えない環境（data: URL など）向けの in-memory フォールバック
+const storage = (() => {
+  try {
+    const t = "__t__";
+    window.localStorage.setItem(t, t);
+    window.localStorage.removeItem(t);
+    return window.localStorage;
+  } catch {
+    const mem = {};
+    const noStoreBanner = () => {
+      const b = document.getElementById("storage-warn");
+      if (b) b.style.display = "block";
+    };
+    setTimeout(noStoreBanner, 0);
+    return {
+      getItem: k => (k in mem ? mem[k] : null),
+      setItem: (k, v) => { mem[k] = String(v); },
+      removeItem: k => { delete mem[k]; },
+    };
+  }
+})();
+
+try {
+// ============================================================
+// 町内データ
+// ============================================================
+const TOWNS = {
+  1: { name: "1町内", color: "#e74c3c", desc: "西の下（港西側）" },
+  2: { name: "2町内", color: "#16a085", desc: "登小・八重高西〜バラビドー" },     // 青緑
+  3: { name: "3町内", color: "#27ae60", desc: "裁判所以南" },
+  4: { name: "4町内", color: "#f1c40f", desc: "気象台西〜3号線以南2号線" },        // 黄色
+  5: { name: "5町内", color: "#e91e63", desc: "八重山高校東〜5町内東" },           // ピンク
+  6: { name: "6町内", color: "#2980b9", desc: "気象台北 3号線〜バイパス間" },      // 青
+  7: { name: "7町内", color: "#7f8c8d", desc: "気象台東〜南東〜八島町" },         // グレー
+  8: { name: "8町内", color: "#c9b896", desc: "産業道路北・警察署周辺・平真小西" },// ベージュ
+};
+
+// PDF番地データ（検索用）
+const PDF_AREAS = [
+  { id: "p1",  page: 1,  town: 1, label: "西の下（1町内）",
+    ranges: [[3,18],[67,72],[74,82],[84,88],[117,119],[121,121],[123,123],[126,126],[129,135],[160,168],[179,179],[182,183]],
+    partials: [{from:1,to:2,note:"1〜2の一部"}] },
+  { id: "p2",  page: 2,  town: 2, label: "登小・八重高西（2町内南）",
+    ranges: [[170,175],[177,178],[180,181],[184,190],[192,194],[196,196],[198,198],[200,210],[212,212],[214,215],[217,219],[221,221],[224,229],[231,233],[235,246],[248,249],[251,274],[283,289]] },
+  { id: "p3",  page: 3,  town: 3, label: "裁判所以南（3町内）",
+    ranges: [[19,47],[49,55],[477,477],[487,488],[490,490]],
+    partials: [{from:2,to:2,note:"2の一部"},{from:479,to:485,note:"479〜485の一部"}] },
+  { id: "p4",  page: 4,  town: 4, label: "気象台西〜2号線（4町内）",
+    ranges: [[58,66],[89,106],[108,108],[110,116],[136,140],[142,142],[144,148],[150,151],[153,153],[155,156],[159,159],[401,422],[424,425],[427,427],[469,477]] },
+  { id: "p5",  page: 5,  town: 8, label: "東の産業道路北（8町内北）",
+    ranges: [[906,1042]] },
+  { id: "p6",  page: 6,  town: 2, label: "西の産業道路北・バラビドー（2町内北）",
+    ranges: [[1049,1402],[1561,1660],[2082,2240]] },
+  { id: "p7",  page: 7,  town: 5, label: "5町内東",
+    ranges: [[653,653],[655,655],[658,658],[672,673],[675,683],[685,685],[688,695],[697,703],[705,706],[708,708],[711,712],[714,716],[718,728],[730,732],[734,741],[743,743]] },
+  { id: "p8",  page: 8,  town: 8, label: "八重山警察署周辺（8町内中）",
+    ranges: [[531,531],[768,768],[790,790],[794,794],[801,801],[808,810],[882,882],[886,895],[898,899],[903,903],[906,906],[908,908]] },
+  { id: "p9",  page: 9,  town: 5, label: "5町内東（追加）",
+    ranges: [[659,661],[668,668],[671,671],[718,718],[745,746],[750,753],[756,756],[758,758],[769,769],[772,772],[779,779],[781,783],[785,787],[790,790],[792,793],[795,795]] },
+  { id: "p10", page: 10, town: 7, label: "気象台東側（7町内中）",
+    ranges: [[542,544],[546,546],[548,550],[552,552]],
+    partials: [{from:575,to:627,note:"575の一部〜627の一部"}] },
+  { id: "p11", page: 11, town: 7, label: "南東・八島町全域（7町内南）",
+    partials: [{from:509,to:575,note:"509〜575の一部"}], yashima: true },
+  { id: "p12", page: 12, town: 6, label: "気象台北 3号線〜バイパス（6町内）",
+    ranges: [[428,468],[518,518],[569,571],[605,606],[609,609]],
+    partials: [{from:485,to:496,note:"485〜496の一部"},{from:497,to:510,note:"497〜510の一部"}] },
+  { id: "p13", page: 13, town: 5, label: "八重山高校東 産業道路〜3号線（5町内西）",
+    ranges: [[319,400]] },
+  { id: "p14a", page: 14, town: 8, label: "平真小西（8町内南）",
+    ranges: [[810,810],[813,813],[816,816],[822,822],[825,825],[830,830],[833,833],[842,843],[845,846],[849,849],[859,859],[861,861],[864,864],[869,870],[872,872],[881,882],[885,885],[905,905]] },
+  { id: "p14b", page: 14, town: 7, label: "平真小西（7町内北）",
+    ranges: [[627,631],[633,636],[638,646],[649,652]] },
+];
+
+// ============================================================
+// ポリゴン model — 1ポリゴン=1町内, 同町内に複数パート可
+// 以下のデフォルトは2026-06-23時点でユーザーが書き出したJSONを焼き込み
+// ============================================================
+const HARDCODED_DEFAULT_POLYGONS = [
+  { id: "1-1", town: 1, label: "1町内 西の下", pages: [1],
+    coords: [[24.33819160191431,124.15799617767335],[24.3389149758389,124.1591763496399],[24.339912052044582,124.16080713272096],[24.338787896935045,124.1623628139496],[24.337399795991004,124.16054964065553],[24.336520005826983,124.15913343429567]] },
+  { id: "2-1", town: 2, label: "2町内 南(八重高西)", pages: [2],
+    coords: [[24.346510152617075,124.162974357605],[24.345923668709176,124.16155815124513],[24.34523943405007,124.15876865386964],[24.346666547867066,124.16063547134401],[24.345180785192973,124.16078567504884],[24.342463358361933,124.1591763496399],[24.344203300242267,124.1617512702942]] },
+  { id: "2-2", town: 2, label: "2町内 北(バラビドー)", pages: [6],
+    coords: [[24.368364515573454,124.17211532592775],[24.369459089232187,124.17829513549806],[24.362344191153174,124.17451858520509],[24.35085004910508,124.1728448867798],[24.346754520110295,124.17108535766603],[24.345923668709176,124.17030215263368],[24.344750692744228,124.16956186294557],[24.34249268342313,124.16815638542177],[24.34129480068168,124.16711430636978],[24.342069913134058,124.16644245386125],[24.341520065271055,124.16554927825929],[24.34025418422803,124.16409015655519],[24.338787896935045,124.1623628139496],[24.339912052044582,124.16080713272096],[24.341349001004588,124.16199803352357],[24.344428122449056,124.1648304462433],[24.346490603197235,124.16610717773439],[24.35335226414775,124.17031288146974]] },
+  { id: "3-1", town: 3, label: "3町内 裁判所以南", pages: [3],
+    coords: [[24.337399795991004,124.16054964065553],[24.335933475656443,124.1622018814087],[24.335532678478078,124.16282415390016],[24.334535567801446,124.16228771209718],[24.33497547053794,124.16057109832765],[24.335630434004354,124.15965914726259],[24.336520005826983,124.15913343429567]] },
+  { id: "4-1", town: 4, label: "4町内 気象台西", pages: [4],
+    coords: [[24.338787896935045,124.1623628139496],[24.338066966124984,124.16361540555957],[24.337834801092374,124.16439592838289],[24.337350918919974,124.16407942771913],[24.335532678478078,124.16282415390016],[24.337399795991004,124.16054964065553]] },
+  { id: "5-1", town: 5, label: "5町内 西(八重高東)", pages: [13],
+    coords: [[24.34206659493633,124.1664423721619],[24.34129480068168,124.16711430636978],[24.34087979497346,124.16778087615968],[24.340723392576802,124.1683602333069],[24.339863175942934,124.16843533515932],[24.339921827262646,124.16805982589723],[24.339320649948075,124.16801154613496],[24.33896385230644,124.16778624057771],[24.337810362643147,124.16708350181581],[24.337394908284754,124.16780769824983],[24.337404683697063,124.16678041219714],[24.33746822385876,124.16567265987398],[24.336725290745115,124.16517913341524],[24.33698922800818,124.16458368301393],[24.337370469750645,124.16409015655519],[24.337834801092374,124.16439592838289],[24.338074297645395,124.16360467672351],[24.338787896935045,124.1623628139496],[24.340821144097333,124.164776802063],[24.341510290176334,124.1655331850052]] },
+  { id: "5-2", town: 5, label: "5町内 東 [⚠移動済/重複候補]", pages: [7],
+    coords: [[24.350459073536925,124.1852903366089],[24.34330400742372,124.1838312149048],[24.344242399785156,124.1812562942505],[24.345845470649547,124.18653488159181]] },
+  { id: "5-3", town: 5, label: "5町内 東(追加) [⚠移動済/重複候補]", pages: [9],
+    coords: [[24.344516096247407,124.1783380508423],[24.345474029206848,124.17709350585939],[24.341505402628705,124.18005466461183],[24.340195533062218,124.17861700057985]] },
+  { id: "6-1", town: 6, label: "6町内 気象台北", pages: [12],
+    coords: [[24.33736069433568,124.16409015655519],[24.336969677118667,124.1646158695221],[24.336725290745115,124.16517913341524],[24.335141655618663,124.1639828681946],[24.33427162542638,124.1634786128998],[24.334535567801446,124.16228771209718],[24.335532678478078,124.16282415390016]] },
+  { id: "7-1", town: 7, label: "7町内 中(気象台東)", pages: [10],
+    coords: [[24.336725290745115,124.16517913341524],[24.33746822385876,124.16567265987398],[24.337404683697063,124.16678041219714],[24.337394908284754,124.16780769824983],[24.337507325480896,124.16960477828981],[24.337727271880464,124.17105853557588],[24.337869014913387,124.17207241058351],[24.33746822385876,124.17179346084596],[24.337370469750645,124.17197585105897],[24.335767291614417,124.17031288146974],[24.336060557423842,124.16980862617494],[24.33292257803303,124.16728734970094],[24.33427162542638,124.1634786128998]] },
+  { id: "7-2", town: 7, label: "7町内 南(八島町)", pages: [11],
+    coords: [[24.327389378314024,124.16996955871583],[24.331299791847428,124.17323112487794],[24.331,124.162],[24.32871893245419,124.17563438415529]] },
+  { id: "7-3", town: 7, label: "7町内 北(平真小西) [⚠移動済/重複候補]", pages: [14],
+    coords: [[24.338885649949333,124.18378829956056],[24.338455536122222,124.18722152709962],[24.32707654001865,124.18687820434572],[24.332551098692317,124.19009685516359]] },
+  { id: "8-1", town: 8, label: "8町内 北(運動公園) [⚠移動済/重複候補]", pages: [5],
+    coords: [[24.35941211124312,124.18245792388917],[24.351866579931283,124.18614864349367],[24.347,124.1795],[24.354603353121153,124.1869640350342]] },
+  { id: "8-2", town: 8, label: "8町内 中(警察署) [⚠移動済/重複候補]", pages: [8],
+    coords: [[24.355345804647996,124.18626832207237],[24.34982816290934,124.17819208334379],[24.345806371601626,124.18099880218507],[24.35679272906883,124.1829299926758]] },
+  { id: "8-3", town: 8, label: "8町内 南(平真小西/警察署統合)", pages: [8,14],
+    coords: [[24.340723392576802,124.1683602333069],[24.340870019829325,124.16780769824983],[24.341292794123763,124.16712373495105],[24.342497570932668,124.16817247867586],[24.34592611239776,124.17031019926073],[24.346754520110295,124.17108535766603],[24.346373306614858,124.17355298995973],[24.344281499315986,124.17343497276308],[24.341290350345755,124.17139649391176],[24.340821144097333,124.17157351970674],[24.339892501606187,124.17128384113313],[24.338184270400692,124.17071521282196],[24.3382551416813,124.17120337486269],[24.337727271880464,124.17105853557588],[24.33751221318282,124.16962623596193],[24.337394908284754,124.16780769824983],[24.337807918797953,124.16708886623384],[24.339320649948075,124.16801154613496],[24.339921827262646,124.16805982589723],[24.339863175942934,124.16843533515932]] },
+];
+
+// 旧形式（p1, p2, ... pX）からの移行マップ
+const LEGACY_TO_NEW = {
+  p1:"1-1", p2:"2-1", p3:"3-1", p4:"4-1", p5:"8-1",
+  p6:"2-2", p7:"5-2", p8:"8-2", p9:"5-3",
+  p10:"7-1", p11:"7-2", p12:"6-1", p13:"5-1", p14a:"8-3", p14b:"7-3",
+};
+const NEW_TO_TOWN = HARDCODED_DEFAULT_POLYGONS.reduce((m, p) => (m[p.id] = p.town, m), {});
+const NEW_TO_LABEL = HARDCODED_DEFAULT_POLYGONS.reduce((m, p) => (m[p.id] = p.label, m), {});
+const NEW_TO_PAGES = HARDCODED_DEFAULT_POLYGONS.reduce((m, p) => (m[p.id] = p.pages, m), {});
+
+// ============================================================
+// localStorage
+// ============================================================
+const POLY_KEY   = "tonoshiro_polygons_v3";  // bumped: 2026-06-23 焼き込みデフォルト反映
+const FROZEN_KEY = "tonoshiro_frozen_default_v1";
+const RELABEL_KEY= "tonoshiro_relabel_overrides_v1";
+const LEGACY_KEYS = ["tonoshiro_polygons_v1", "tonoshiro_polygons_v2"];
+
+// v1（オブジェクト）も v2/v3（配列）も受け付けて配列に正規化
+function normalizeImport(data) {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") {
+    const out = [];
+    for (const oldId in data) {
+      const newId = LEGACY_TO_NEW[oldId];
+      if (!newId) continue;
+      out.push({
+        id: newId,
+        town: NEW_TO_TOWN[newId] || 5,
+        label: NEW_TO_LABEL[newId] || `(旧 ${oldId})`,
+        pages: NEW_TO_PAGES[newId] || [],
+        coords: data[oldId],
+      });
+    }
+    return out;
+  }
+  throw new Error("不明な形式のJSONです");
+}
+
+function migrateLegacy() {
+  for (const key of LEGACY_KEYS) {
+    const raw = storage.getItem(key);
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw);
+      const normalized = normalizeImport(parsed);
+      storage.setItem(POLY_KEY, JSON.stringify(normalized));
+      storage.removeItem(key);
+      return normalized;
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+function sanitize(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter(p => p && typeof p === "object"
+    && Array.isArray(p.coords) && p.coords.length >= 3
+    && p.coords.every(c => Array.isArray(c) && c.length >= 2 && isFinite(c[0]) && isFinite(c[1]))
+    && TOWNS[p.town]
+  );
+}
+
+function loadPolygons() {
+  const saved = storage.getItem(POLY_KEY);
+  if (saved) {
+    try { const arr = sanitize(JSON.parse(saved)); if (arr.length) return arr; } catch {}
+  }
+  const migrated = migrateLegacy();
+  if (migrated) { const arr = sanitize(migrated); if (arr.length) return arr; }
+  const frozen = storage.getItem(FROZEN_KEY);
+  if (frozen) {
+    try { const arr = sanitize(JSON.parse(frozen)); if (arr.length) return arr; } catch {}
+  }
+  return JSON.parse(JSON.stringify(HARDCODED_DEFAULT_POLYGONS));
+}
+
+function getResetTarget() {
+  const frozen = storage.getItem(FROZEN_KEY);
+  if (frozen) { try { return JSON.parse(frozen); } catch {} }
+  return JSON.parse(JSON.stringify(HARDCODED_DEFAULT_POLYGONS));
+}
+
+function savePolygons() {
+  storage.setItem(POLY_KEY, JSON.stringify(polygons));
+  flashStatus("保存しました ✓");
+}
+
+let polygons = loadPolygons();
+let relabelOverrides = (() => {
+  try { return JSON.parse(storage.getItem(RELABEL_KEY) || "{}"); } catch { return {}; }
+})();
+function saveOverrides() { storage.setItem(RELABEL_KEY, JSON.stringify(relabelOverrides)); }
+
+// ============================================================
+// 7町内ではない番地リスト
+// ============================================================
+const NON_TOWN7 = {
+  ranges: [[1,504],[569,571],[641,1999]],
+  singles: [507, 510, 606, 608, 609],
+  branches: ["573-3", "588-1", "613-3"],
+};
+
+function isNumberInNon7(num) {
+  for (const [f,t] of NON_TOWN7.ranges) if (num >= f && num <= t) return true;
+  return NON_TOWN7.singles.includes(num);
+}
+function isAddressInNon7(addr) {
+  if (NON_TOWN7.branches.includes(addr)) return true;
+  const m = String(addr).match(/^(\d+)(?:-\d+)?$/);
+  if (m) return isNumberInNon7(parseInt(m[1]));
+  return false;
+}
+
+// ============================================================
+// 番地 → 町内 検索
+// ============================================================
+function normalize(numStr) {
+  return String(numStr).replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+                       .replace(/番地?/g, "").trim();
+}
+function parseAddr(numStr) {
+  const cleaned = normalize(numStr);
+  const m = cleaned.match(/(\d+(?:-\d+)?)/);
+  return m ? m[1] : null;
+}
+
+function findTown(numStr) {
+  const fullAddr = parseAddr(numStr);
+  if (!fullAddr) return { error: "番地（数字）が見つかりません" };
+
+  // オーバーライドが最優先
+  if (relabelOverrides[fullAddr]) {
+    return { number: fullAddr, override: relabelOverrides[fullAddr], pdfHits: lookupPdf(fullAddr) };
+  }
+  // 整数の親番がオーバーライドされていれば、それも参照（枝番用）
+  const intMatch = fullAddr.match(/^(\d+)/);
+  const baseNum = intMatch ? parseInt(intMatch[1]) : null;
+  if (baseNum && relabelOverrides[String(baseNum)] && fullAddr !== String(baseNum)) {
+    return { number: fullAddr, override: relabelOverrides[String(baseNum)], pdfHits: lookupPdf(fullAddr), inheritedFromBase: true };
+  }
+  return { number: fullAddr, ...lookupPdf(fullAddr) };
+}
+
+function lookupPdf(fullAddr) {
+  const intMatch = fullAddr.match(/^(\d+)/);
+  if (!intMatch) return { exact: [], partial: [] };
+  const num = parseInt(intMatch[1]);
+  const exact = [], partial = [];
+  for (const area of PDF_AREAS) {
+    if (area.ranges) {
+      for (const [f, t] of area.ranges) {
+        if (num >= f && num <= t) { exact.push({ ...area, matchedRange: [f,t] }); break; }
+      }
+    }
+    if (area.partials) {
+      for (const p of area.partials) {
+        if (num >= p.from && num <= p.to) { partial.push({ ...area, matchedPartial: p }); break; }
+      }
+    }
+  }
+  return { exact, partial };
+}
+
+// ============================================================
+// 地図初期化
+// ============================================================
+const map = L.map("map", { pmIgnore: false }).setView([24.3445, 124.1665], 14);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 19, pmIgnore: true,
+}).addTo(map);
+
+const layerById = {}; // polygon id → L.polygon
+
+function styleFor(town) {
+  const c = TOWNS[town].color;
+  return { color: c, weight: 2, opacity: 0.9, fillColor: c, fillOpacity: 0.32 };
+}
+
+function makeLayer(poly) {
+  const layer = L.polygon(poly.coords, styleFor(poly.town));
+  // ホバーで町内名のみツールチップ表示
+  layer.bindTooltip(TOWNS[poly.town].name, {
+    sticky: true, direction: "center",
+    className: "town-hover", opacity: 1,
+  });
+  layer._polyId = poly.id;
+  layer._town = poly.town;
+
+  layer.on("pm:edit pm:vertexadded pm:vertexremoved pm:markerdragend", () => {
+    const newCoords = layer.getLatLngs()[0].map(ll => [ll.lat, ll.lng]);
+    poly.coords = newCoords;
+    savePolygons();
+  });
+  layer.on("click", e => {
+    if (editMode) {
+      L.DomEvent.stopPropagation(e);
+      selectPart(poly.id);
+    }
+  });
+  layer.addTo(map);
+  layerById[poly.id] = layer;
+  return layer;
+}
+
+function rebuildAllLayers() {
+  Object.values(layerById).forEach(l => map.removeLayer(l));
+  for (const id in layerById) delete layerById[id];
+  polygons.forEach(makeLayer);
+}
+rebuildAllLayers();
+
+// ============================================================
+// 編集モード
+// ============================================================
+let editMode = false;
+let activePartId = null;
+const EDIT_PASSWORD = "akanma";
+
+const toggleBtn = document.getElementById("toggle-edit");
+const editControls = document.getElementById("edit-controls");
+const townSelect = document.getElementById("town-select");
+const partList = document.getElementById("part-list");
+const snapToggle = document.getElementById("snap-toggle");
+const saveStatus = document.getElementById("save-status");
+
+Object.entries(TOWNS).forEach(([num, t]) => {
+  const opt = document.createElement("option");
+  opt.value = num;
+  opt.textContent = t.name;
+  townSelect.appendChild(opt);
+});
+
+toggleBtn.addEventListener("click", () => {
+  if (!editMode) {
+    const pw = prompt("編集モードに入るにはパスワードを入力");
+    if (pw === null) return;
+    if (pw !== EDIT_PASSWORD) { alert("パスワードが違います"); return; }
+  }
+  editMode = !editMode;
+  document.querySelector("header").classList.toggle("edit-mode", editMode);
+  toggleBtn.classList.toggle("on", editMode);
+  toggleBtn.textContent = editMode ? "編集モードOFF" : "編集モードON";
+  editControls.style.display = editMode ? "block" : "none";
+  if (editMode) {
+    map.closePopup();
+    selectTown(parseInt(townSelect.value || "1"));
+  } else {
+    deactivateAll();
+  }
+});
+
+function deactivateAll() {
+  Object.values(layerById).forEach(l => { if (l.pm.enabled()) l.pm.disable(); });
+  activePartId = null;
+}
+
+function selectTown(townNum) {
+  if (!editMode) return;
+  townSelect.value = String(townNum);
+  renderPartList(townNum);
+  // 地図フォーカス
+  const parts = polygons.filter(p => p.town === townNum);
+  if (parts.length) {
+    const grp = L.featureGroup(parts.map(p => layerById[p.id]));
+    map.fitBounds(grp.getBounds().pad(0.3));
+  }
+  // 自動で先頭を編集対象に
+  if (parts.length) selectPart(parts[0].id);
+  else deactivateAll();
+}
+
+function selectPart(partId) {
+  if (!editMode) return;
+  deactivateAll();
+  activePartId = partId;
+  const poly = polygons.find(p => p.id === partId);
+  if (!poly) return;
+  townSelect.value = String(poly.town);
+  renderPartList(poly.town);
+  const layer = layerById[partId];
+  layer.pm.enable({
+    snappable: snapToggle.checked, snapDistance: 18,
+    allowSelfIntersection: false, removeLayerBelowMinVertexCount: false,
+  });
+  map.fitBounds(layer.getBounds().pad(0.3));
+}
+
+function renderPartList(townNum) {
+  const parts = polygons.filter(p => p.town === townNum);
+  if (!parts.length) {
+    partList.innerHTML = '<div style="padding:8px;color:#999;font-size:12px">この町内にはポリゴンがありません</div>';
+    return;
+  }
+  partList.innerHTML = parts.map(p => `
+    <div class="part-row ${p.id === activePartId ? "active" : ""}">
+      <span class="part-label">${p.label || p.id}</span>
+      <button class="edit-btn" data-id="${p.id}">編集</button>
+      <button class="del" data-id="${p.id}">削除</button>
+    </div>
+  `).join("");
+  partList.querySelectorAll(".edit-btn").forEach(b => b.addEventListener("click", () => selectPart(b.dataset.id)));
+  partList.querySelectorAll(".del").forEach(b => b.addEventListener("click", () => {
+    const id = b.dataset.id;
+    const poly = polygons.find(p => p.id === id);
+    if (!confirm(`「${poly.label}」を削除しますか？`)) return;
+    map.removeLayer(layerById[id]); delete layerById[id];
+    polygons = polygons.filter(p => p.id !== id);
+    savePolygons();
+    renderPartList(townNum);
+  }));
+}
+
+townSelect.addEventListener("change", e => selectTown(parseInt(e.target.value)));
+snapToggle.addEventListener("change", () => { if (activePartId) selectPart(activePartId); });
+
+document.getElementById("add-part-btn").addEventListener("click", () => {
+  const townNum = parseInt(townSelect.value);
+  alert("地図上をクリックして頂点を打ち、最後にダブルクリックまたは始点クリックで確定してください。");
+  map.pm.enableDraw("Polygon", { snappable: snapToggle.checked, snapDistance: 18 });
+  const onCreate = e => {
+    map.pm.disableDraw();
+    map.off("pm:create", onCreate);
+    const coords = e.layer.getLatLngs()[0].map(ll => [ll.lat, ll.lng]);
+    map.removeLayer(e.layer);
+    const newId = `${townNum}-new-${Date.now()}`;
+    const newPoly = { id: newId, town: townNum, label: `${TOWNS[townNum].name} 追加`, pages: [], coords };
+    polygons.push(newPoly);
+    makeLayer(newPoly);
+    savePolygons();
+    selectTown(townNum);
+    selectPart(newId);
+  };
+  map.on("pm:create", onCreate);
+});
+
+// 凍結デフォルト
+document.getElementById("freeze-btn").addEventListener("click", () => {
+  if (!confirm("現状を「凍結デフォルト」として保存します。\n以後「凍結デフォルトに戻す」はこの状態に戻ります。\nまたJSONファイルもダウンロードします（コードへの組み込み用）。OK?")) return;
+  storage.setItem(FROZEN_KEY, JSON.stringify(polygons));
+  const blob = new Blob([JSON.stringify(polygons, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "tonoshiro_frozen_default.json"; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  flashStatus("凍結デフォルトに固定 ✓");
+});
+
+document.getElementById("reset-all-btn").addEventListener("click", () => {
+  if (!confirm("凍結デフォルト（無ければハードコード値）に全ポリゴンを戻します。OK?")) return;
+  polygons = getResetTarget();
+  rebuildAllLayers();
+  storage.setItem(POLY_KEY, JSON.stringify(polygons));
+  selectTown(parseInt(townSelect.value || "1"));
+  flashStatus("リセットしました");
+});
+
+document.getElementById("export-btn").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(polygons, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "tonoshiro_polygons.json"; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+
+document.getElementById("import-btn").addEventListener("click", () => document.getElementById("import-file").click());
+document.getElementById("import-file").addEventListener("change", e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      polygons = normalizeImport(data);
+      rebuildAllLayers();
+      savePolygons();
+      selectTown(parseInt(townSelect.value || "1"));
+      flashStatus("読み込み完了 ✓");
+    } catch (err) { alert("JSONの読み込みに失敗: " + err.message); }
+  };
+  r.readAsText(f);
+  e.target.value = "";
+});
+
+function flashStatus(msg) {
+  saveStatus.textContent = msg;
+  saveStatus.style.background = "#d4edda";
+  setTimeout(() => {
+    saveStatus.textContent = "変更は自動でブラウザに保存されます";
+    saveStatus.style.background = "white";
+  }, 2000);
+}
+
+// ============================================================
+// OSM道路スナップ用
+// ============================================================
+const snapStatus = document.getElementById("snap-status");
+let snapLayer = null;
+async function loadRoadsForSnap() {
+  snapStatus.textContent = "道路データ：取得中…";
+  const query = `[out:json][timeout:25];
+    way["highway"~"^(primary|secondary|tertiary|residential|unclassified|living_street|service)$"](24.328,124.150,24.362,124.185);
+    out geom;`;
+  const url = "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query);
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    const features = (data.elements || []).filter(w => w.geometry).map(w => ({
+      type: "Feature", properties: { name: w.tags?.name || "" },
+      geometry: { type: "LineString", coordinates: w.geometry.map(p => [p.lon, p.lat]) },
+    }));
+    snapLayer = L.geoJSON({ type: "FeatureCollection", features },
+      { style: { color: "#666", weight: 1, opacity: 0 }, interactive: false }).addTo(map);
+    snapStatus.textContent = `道路データ：${features.length}本 読込済 ✓`;
+    snapStatus.style.background = "#d4edda";
+  } catch (e) {
+    console.warn("Overpass fetch failed", e);
+    snapStatus.textContent = "道路データ：取得失敗（手動編集は可能）";
+    snapStatus.style.background = "#fff3cd";
+  }
+}
+loadRoadsForSnap();
+
+// ============================================================
+// 凡例・PDF参照
+// ============================================================
+const legendList = document.getElementById("legend-list");
+Object.entries(TOWNS).forEach(([num, t]) => {
+  const li = document.createElement("li");
+  li.innerHTML = `<span class="swatch" style="background:${t.color}"></span>
+                  <div><div><b>${t.name}</b></div><div class="desc">${t.desc}</div></div>`;
+  li.addEventListener("click", () => focusTown(parseInt(num)));
+  legendList.appendChild(li);
+});
+
+function focusTown(townNum) {
+  const parts = polygons.filter(p => p.town === townNum).map(p => layerById[p.id]).filter(Boolean);
+  if (!parts.length) return;
+  const grp = L.featureGroup(parts);
+  map.fitBounds(grp.getBounds().pad(0.1));
+  parts.forEach(l => { l.setStyle({ weight: 5 }); setTimeout(() => l.setStyle({ weight: 2 }), 1500); });
+}
+
+const refsList = document.getElementById("pdf-refs");
+const uniquePages = [...new Set(PDF_AREAS.map(a => a.page))].sort((a,b) => a - b);
+uniquePages.forEach(p => {
+  const area = PDF_AREAS.find(a => a.page === p);
+  const li = document.createElement("li");
+  li.innerHTML = `<a href="zumendainigogatu.pdf#page=${p}" target="_blank">p.${p}</a> — ${area.label}`;
+  refsList.appendChild(li);
+});
+
+// ============================================================
+// 検索UI
+// ============================================================
+const input = document.getElementById("banchi");
+const resultBox = document.getElementById("result");
+
+function render(numStr) {
+  if (!numStr.trim()) {
+    resultBox.className = "result empty";
+    resultBox.textContent = "番地を入力してください"; return;
+  }
+  const res = findTown(numStr);
+  if (res.error) { resultBox.className = "result empty"; resultBox.textContent = res.error; return; }
+
+  // オーバーライド
+  if (res.override) {
+    const color = TOWNS[res.override].color;
+    resultBox.className = "result found"; resultBox.style.borderLeftColor = color;
+    let html = `<div>登野城 <b>${res.number}</b> 番地</div>`;
+    html += `<div class="town-num" style="color:${color}">${TOWNS[res.override].name}</div>`;
+    html += `<div class="town-desc">再ラベリング適用済${res.inheritedFromBase ? "（親番からの継承）" : ""}</div>`;
+    if (res.pdfHits && (res.pdfHits.exact.length || res.pdfHits.partial.length)) {
+      const orig = res.pdfHits.exact[0] || res.pdfHits.partial[0];
+      html += `<div class="ovr">元PDF分類: ${TOWNS[orig.town].name}（${orig.label}）</div>`;
+    }
+    resultBox.innerHTML = html;
+    if (!editMode) focusTown(res.override);
+    return;
+  }
+
+  if (!res.exact?.length && !res.partial?.length) {
+    resultBox.className = "result empty";
+    resultBox.innerHTML = `登野城<b>${res.number}</b>番地は<br>PDFのどの町内範囲にも該当しません。`;
+    return;
+  }
+  const allHits = [...(res.exact||[]), ...(res.partial||[])];
+  const townSet = [...new Set(allHits.map(a => a.town))];
+  const primary = res.exact?.[0] || res.partial?.[0];
+  const color = TOWNS[primary.town].color;
+
+  resultBox.className = "result found"; resultBox.style.borderLeftColor = color;
+  let html = `<div>登野城 <b>${res.number}</b> 番地</div>`;
+  html += `<div class="town-num" style="color:${color}">${TOWNS[primary.town].name}</div>`;
+  html += `<div class="town-desc">${primary.label}（PDF p.${primary.page}）</div>`;
+  if (res.partial?.length) {
+    html += `<div class="note">⚠ PDF原本で「<b>${res.partial[0].matchedPartial.note}</b>」と記載 → 現地確認推奨</div>`;
+  }
+  if (townSet.length > 1) {
+    const others = townSet.slice(1).map(t => TOWNS[t].name).join("・");
+    html += `<div class="multi">他候補：${others}（PDFに重複記載あり）</div>`;
+  }
+  resultBox.innerHTML = html;
+  if (!editMode) focusTown(primary.town);
+}
+input.addEventListener("input", e => render(e.target.value));
+input.addEventListener("keydown", e => { if (e.key === "Enter") render(e.target.value); });
+
+// ============================================================
+// 7町内整合性チェック ＆ 再ラベリングUI
+// ============================================================
+function buildBanchiMap() {
+  const map = {};
+  for (const area of PDF_AREAS) {
+    if (area.ranges) {
+      for (const [f,t] of area.ranges) for (let n = f; n <= t; n++) {
+        (map[n] = map[n] || []).push({ town: area.town, partial: false, areaId: area.id, page: area.page });
+      }
+    }
+    if (area.partials) {
+      for (const p of area.partials) for (let n = p.from; n <= p.to; n++) {
+        (map[n] = map[n] || []).push({ town: area.town, partial: true, areaId: area.id, page: area.page, note: p.note });
+      }
+    }
+  }
+  return map;
+}
+
+function effectiveTownsFor(addrKey, baseEntries) {
+  if (relabelOverrides[addrKey]) return [relabelOverrides[addrKey]];
+  return [...new Set((baseEntries || []).map(e => e.town))];
+}
+
+function runCheck() {
+  const bm = buildBanchiMap();
+  const case1 = [], case2 = [];
+  // 整数番地
+  for (const numStr in bm) {
+    const num = parseInt(numStr);
+    const entries = bm[numStr];
+    const eff = effectiveTownsFor(numStr, entries);
+    if (!eff.length) continue;
+    const inList = isNumberInNon7(num);
+    const is7 = eff.includes(7);
+    const onlyPartial = entries.every(e => e.partial);
+    if (!inList && !is7) case1.push({ addr: numStr, currentTowns: eff, onlyPartial });
+    if (inList && is7)  case2.push({ addr: numStr, currentTowns: eff, onlyPartial });
+  }
+  // 枝番（リスト記載分）
+  for (const branch of NON_TOWN7.branches) {
+    if (relabelOverrides[branch]) {
+      if (relabelOverrides[branch] === 7) case2.push({ addr: branch, currentTowns: [7], branch: true, overridden: true });
+      continue;
+    }
+    const baseNum = parseInt(branch);
+    const baseEntries = bm[baseNum] || [];
+    const baseTowns = [...new Set(baseEntries.map(e => e.town))];
+    if (baseTowns.includes(7)) {
+      case2.push({ addr: branch, currentTowns: baseTowns, branch: true, onlyPartial: baseEntries.every(e => e.partial) });
+    }
+  }
+  case1.sort((a,b) => parseFloat(a.addr) - parseFloat(b.addr));
+  case2.sort((a,b) => parseFloat(a.addr) - parseFloat(b.addr));
+  return { case1, case2 };
+}
+
+function renderCheck() {
+  const { case1, case2 } = runCheck();
+  const container = document.getElementById("check-results");
+  let html = `<div class="summary-line">case1（7に再ラベル候補）: <b>${case1.length}</b>件 ／ case2（7から外す候補）: <b>${case2.length}</b>件</div>`;
+
+  if (case1.length) {
+    html += `<h4>① 7町内に再ラベリング候補（リスト外で現在7以外）</h4><div class="rel-list">`;
+    for (const it of case1) {
+      const cur = it.currentTowns.map(t => TOWNS[t].name).join("/");
+      const flag = it.onlyPartial ? " <span style=\"color:#b7791f\">(部分)</span>" : "";
+      html += `<div class="rel-row">
+        <span class="banchi-label">${it.addr}番地${flag}<br><small>現:${cur}</small></span>
+        <button data-action="apply" data-addr="${it.addr}" data-target="7">→ 7町内</button>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  if (case2.length) {
+    html += `<h4>② 7町内から外す候補（リスト内で現在7）</h4><div class="rel-list">`;
+    const targetOpts = [1,2,3,4,5,6,8].map(t => `<option value="${t}">${TOWNS[t].name}</option>`).join("");
+    for (const it of case2) {
+      const cur = it.currentTowns.map(t => TOWNS[t].name).join("/");
+      const flag = (it.onlyPartial ? " <span style=\"color:#b7791f\">(部分)</span>" : "") + (it.branch ? " <span style=\"color:#0c5460\">(枝番)</span>" : "");
+      html += `<div class="rel-row">
+        <span class="banchi-label">${it.addr}番地${flag}<br><small>現:${cur}</small></span>
+        <select data-addr="${it.addr}"><option value="">変更先</option>${targetOpts}</select>
+        <button data-action="apply-select" data-addr="${it.addr}">適用</button>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  const okeys = Object.keys(relabelOverrides);
+  if (okeys.length) {
+    html += `<h4>適用済オーバーライド（${okeys.length}件）</h4><div class="override-list">`;
+    for (const k of okeys.sort((a,b) => parseFloat(a) - parseFloat(b))) {
+      html += `<div class="override-row">${k}番地 → ${TOWNS[relabelOverrides[k]].name}
+        <button data-action="remove" data-addr="${k}">×</button></div>`;
+    }
+    html += `</div>`;
+  }
+  container.innerHTML = html;
+
+  // バインド
+  container.querySelectorAll('button[data-action="apply"]').forEach(b => {
+    b.addEventListener("click", () => {
+      relabelOverrides[b.dataset.addr] = parseInt(b.dataset.target);
+      saveOverrides(); renderCheck(); flashStatus(`${b.dataset.addr}番地 → ${TOWNS[b.dataset.target].name} ✓`);
+    });
+  });
+  container.querySelectorAll('button[data-action="apply-select"]').forEach(b => {
+    b.addEventListener("click", () => {
+      const sel = container.querySelector(`select[data-addr="${b.dataset.addr}"]`);
+      const val = parseInt(sel.value);
+      if (!val) return alert("変更先を選択してください");
+      relabelOverrides[b.dataset.addr] = val;
+      saveOverrides(); renderCheck(); flashStatus(`${b.dataset.addr}番地 → ${TOWNS[val].name} ✓`);
+    });
+  });
+  container.querySelectorAll('button[data-action="remove"]').forEach(b => {
+    b.addEventListener("click", () => {
+      delete relabelOverrides[b.dataset.addr];
+      saveOverrides(); renderCheck();
+    });
+  });
+}
+
+document.getElementById("run-check-btn").addEventListener("click", renderCheck);
+
+// 全体表示
+if (polygons.length) {
+  const validLayers = Object.values(layerById).filter(Boolean);
+  if (validLayers.length) {
+    const allBounds = L.featureGroup(validLayers).getBounds();
+    if (allBounds.isValid()) map.fitBounds(allBounds.pad(0.05));
+  }
+}
+} catch (e) {
+  const banner = document.getElementById("error-banner");
+  const msg = document.getElementById("error-msg");
+  if (banner && msg) {
+    banner.style.display = "block";
+    msg.textContent = (e.message || String(e)) + "  —  詳細はブラウザのコンソール（Cmd+Opt+J）を確認";
+  }
+  console.error("[init catch]", e);
+}
+</script>
+</body>
+</html>
