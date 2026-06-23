@@ -92,20 +92,47 @@
   .override-row { display: flex; gap: 6px; align-items: center; padding: 3px 0; font-size: 12px; }
   .override-row button { margin-left: auto; background: #e74c3c; color: white; border: none; border-radius: 3px; padding: 2px 8px; cursor: pointer; font-size: 11px; }
 
+  /* ハンバーガー（モバイル時のみ） */
+  .hamburger { display: none; background: transparent; border: 1px solid rgba(255,255,255,.4); color: white; font-size: 18px; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
+  .drawer-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 999; }
+  .drawer-backdrop.open { display: block; }
+
   @media (max-width: 720px) {
-    .layout { grid-template-columns: 1fr; grid-template-rows: auto 60vh; height: auto; }
-    .sidebar { max-height: none; }
+    header h1 { font-size: 15px; }
+    header .sub { display: none; }
+    .hamburger { display: inline-block; }
+    .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: calc(100vh - 56px); }
+    .sidebar { padding: 10px; border-right: none; border-bottom: 1px solid #e1e4e8; max-height: none; overflow: visible; }
+    #map { min-height: 60vh; }
+    /* モバイル時：番地入力だけ常時表示。それ以外はドロワーに */
+    .sidebar > .search { margin-bottom: 0; }
+    #drawer {
+      position: fixed; top: 0; right: 0; bottom: 0; width: 88%; max-width: 360px;
+      background: white; box-shadow: -4px 0 16px rgba(0,0,0,.2);
+      transform: translateX(100%); transition: transform .25s ease;
+      overflow-y: auto; padding: 16px; z-index: 1000;
+    }
+    #drawer.open { transform: translateX(0); }
+    .drawer-close { display: block; margin-bottom: 12px; padding: 6px 12px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  }
+  /* デスクトップでは #drawer は通常のサイドバー内コンテンツとして並ぶ */
+  @media (min-width: 721px) {
+    .drawer-close { display: none; }
   }
 </style>
 </head>
 <body>
 <header>
   <div>
-    <h1>登野城地区 町内マップ（第二民児協）</h1>
+    <h1>登野城地区 町内マップ</h1>
     <div class="sub">番地検索 ／ 7町内整合性チェック ／ 編集モードで道路沿いトレース</div>
   </div>
-  <span class="mode-badge">✏️ 編集モード</span>
+  <div style="display:flex;gap:8px;align-items:center">
+    <span class="mode-badge">✏️ 編集モード</span>
+    <button class="hamburger" id="hamburger" aria-label="メニュー">☰ メニュー</button>
+  </div>
 </header>
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
 <div id="storage-warn" style="display:none;background:#d1ecf1;border-bottom:2px solid #17a2b8;padding:10px 16px;font-size:13px">
   <b>⚠ ローカル保存が無効：</b>このページは <code>data:</code> URLで開かれているため、ブラウザのlocalStorageが使えません。<b>編集してもブラウザを閉じると消えます</b>。永続保存するには、Finderで <code>index.html</code> をダブルクリック → 別タブで開き直してください。または編集後に「JSON書き出し」でファイル保存してください。
 </div>
@@ -123,6 +150,8 @@
       <div id="result" class="result empty">番地を入力してください</div>
     </div>
 
+    <div id="drawer">
+    <button class="drawer-close" id="drawer-close">✕ 閉じる</button>
     <div class="edit-panel">
       <h3>🗺 ポリゴン編集</h3>
       <button id="toggle-edit" class="btn toggle">編集モードON</button>
@@ -172,6 +201,7 @@
     <div class="footer-note">
       地図上の色分けはPDF（zumendainigogatu.pdf）14ページ。番地検索はPDF記載＋再ラベリング結果を反映。
     </div>
+    </div><!-- /#drawer -->
   </aside>
   <div id="map"></div>
 </div>
@@ -923,6 +953,17 @@ function renderCheck() {
 }
 
 document.getElementById("run-check-btn").addEventListener("click", renderCheck);
+
+// ============================================================
+// モバイル用ハンバーガー
+// ============================================================
+const drawer = document.getElementById("drawer");
+const backdrop = document.getElementById("drawer-backdrop");
+function openDrawer() { drawer.classList.add("open"); backdrop.classList.add("open"); }
+function closeDrawer() { drawer.classList.remove("open"); backdrop.classList.remove("open"); }
+document.getElementById("hamburger").addEventListener("click", openDrawer);
+document.getElementById("drawer-close").addEventListener("click", closeDrawer);
+backdrop.addEventListener("click", closeDrawer);
 
 // 全体表示
 if (polygons.length) {
